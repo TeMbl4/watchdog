@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+
+CONFIG="watchdog.conf"
+datesrt=$(date +"%X %x")
+
+runInScreen()
+{
+    if [ "$1" == "true" ]; then
+        SHELL=`whereis bash | awk '{print $2}'`
+        PWD=`pwd`
+        screen -d -m -L -S ${PROC_NAME##*/} $SHELL $PWD/${0##*/}
+	exit
+    else 
+	$SHELL $PWD/${0##*/} > /dev/null 2>&1 &
+	exit
+    fi
+}
+
+if [ ! -f $CONFIG ]; then
+	echo ""
+	echo "Error: Config file not found"
+	echo ""
+	exit
+else
+	source $CONFIG
+	runInScreen $SCREEN
+fi
+
+while true
+do
+  process=`ps ax | grep $PROC_NAME | grep -v grep | wc -l`
+    if [ "$process" = "0" ]; then
+	echo $process
+	$PROC_NAME > /dev/null 2>&1 &
+    fi
+  sleep 10
+done
