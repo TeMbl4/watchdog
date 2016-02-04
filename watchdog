@@ -1,0 +1,131 @@
+#!/usr/bin/env bash
+
+declare -A initarr=()
+declare -A resarr=()
+declare -A crashtrackarr=()
+
+CONFIG="watchdog.conf"
+datesrt=$(date +"%X %x")
+
+if [ ! -f $CONFIG ]; then
+	echo "Error: Config file not found"
+	exit
+else
+	while read -r line
+	do
+		if [[ "$line" =~ ^#PROCESS=.*$ ]]; then
+			echo "Error: uncoment $line line"
+			exit
+		else
+			PROCESS=$line
+		fi
+
+		if [[ "$line" =~ ^#LOG_DIR.*$ ]]; then
+			echo "Error: uncoment $line line"
+			exit
+		else
+			LOG_DIR=$line
+		fi
+	done < $CONFIG
+	
+	echo ""
+	echo "$PROCESS and $LOG_DIR"
+	echo ""
+fi
+
+
+#########Main code###########
+
+readByLine ()
+{
+  buff=$1
+  num=0
+  while read -r line
+  do
+    initarr[$num]=$line
+    num+=1
+  done < $buff
+}
+
+compareArrays()
+{
+  declare -a arr1=("${!1}")
+  declare -a arr2=("${!2}")
+  for i in "${arr1[@]}"; do
+    skip=
+    for j in "${arr2[@]}"; do
+      [[ "$j" == "$i" ]] && { skip=1; break; }
+    done
+    [[ -n $skip ]] || { resarr+="$i "; }
+  done
+}
+
+trackRestart()
+{
+
+  num=0
+  local currtime=`date +%s`
+  local tmpArray=(${crashtrackarr[$1]})
+
+  if (( "${#tmpArray[@]}" == 1 )) && (( "$currtime" < "${tmpArray[0]}" )); then
+    return 1
+  fi
+
+  for time in ${crashtrackarr[$1]}; do
+    if [ $(($currtime - $time)) -lt 60 ]; then
+      num=$(($num+1))
+    fi
+  done
+
+  if (( $num >= 5 )); then
+    echo "$datesrt Won't restart $1 now. Try it in 10 min" >> $LOG_DIR/restart.log
+    tmptime=$(($(date +%s) + 600))
+    crashtrackarr[$1]="$tmptime "
+    return 1
+  else
+    crashtrackarr[$1]+="`date +%s` "
+    #echo $1 " " ${crashtrackarr[$1][@]}
+  fi
+
+  return 0
+}
+
+runIfPossible()
+{
+  if trackRestart $1; then
+     tom start $1
+#    $command $1 > /dev/null 2>&1 &
+#    $command $1 &
+  #echo "Run"
+#    echo "$datesrt Run $command $1" >> $LOG_DIR/restart.log
+  echo "$datesrt Run tom start $1" >> $LOG_DIR/restart.log
+  #echo "Won't restart"
+  fi
+}
+
+echo "$datesrt $0 has started" >> $LOG_DIR/restart.log
+
+#while true
+#do
+#  readByLine "config"
+#  procmap=()
+#  processes=( $(ps ax | grep "/${command##*/}" | grep -v grep) )
+#
+#  for i in `seq 5 6 ${#processes[@]}`; do
+#    psname="${processes[$i]}"
+#    [[ "$psname" =~ "-tom_pr_id:" ]] && { psname=${psname##*:}; }
+#    [[ "$psname" =~ "_ok" ]] && { psname=${psname%%_ok}; }
+#    procmap[i]=$psname
+#    num+=1
+#  done
+#
+#  compareArrays initarr[@] procmap[@]
+#
+#  for tmp in ${resarr[@]}; do
+#    runIfPossible $tmp
+#  done
+#
+#  declare -A initarr=()
+#  declare -A resarr=()
+#  sleep 10
+#done
